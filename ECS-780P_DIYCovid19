@@ -1,0 +1,277 @@
+from uk_covid19 import Cov19API
+import json
+import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+import ipywidgets as wdg
+import matplotlib.pyplot as plt
+filters = [
+    'areaType=nation', # note each metric-value pair is inside one string
+    'areaName=England'
+]
+# values here are the names of the PHE metrics
+structure = {"date": "date",
+             "CumFirstDose": "cumPeopleVaccinatedFirstDoseByVaccinationDate",
+             "CumSecondDose": "cumPeopleVaccinatedSecondDoseByVaccinationDate",
+             "CumBoosterDose": "cumPeopleVaccinatedThirdInjectionByVaccinationDate",
+}
+api = Cov19API(filters=filters, structure=structure)
+agedistribution=api.get_json()
+
+with open("agedistribution.json", "wt") as OUTF:
+    json.dump(agedistribution, OUTF)
+
+from uk_covid19 import Cov19API
+import json
+filters = [
+    'areaType=nation', # note each metric-value pair is inside one string
+    'areaName=England'
+]
+# values here are the names of the PHE metrics
+structure = {"date": "date",
+             "CumFirstDose": "cumPeopleVaccinatedFirstDoseByVaccinationDate",
+             "CumSecondDose": "cumPeopleVaccinatedSecondDoseByVaccinationDate",
+             "CumBoosterDose": "cumPeopleVaccinatedThirdInjectionByVaccinationDate",
+}
+api = Cov19API(filters=filters, structure=structure)
+agedistribution=api.get_json()
+
+with open("agedistribution.json", "wt") as OUTF:
+    json.dump(agedistribution, OUTF)
+
+# an iPython  "magic" that enables the embedding of matplotlib output
+%matplotlib inline
+# make figures larger
+plt.rcParams['figure.dpi'] = 100
+
+with open("agedistribution.json", "rt") as INFILE:
+    data=json.load(INFILE)
+
+datalist=data['data']
+
+dates=[dictionary['date'] for dictionary in datalist ]
+dates.sort()
+
+def parse_date(datestring):
+    """ Convert a date string into a pandas datetime object """
+    return pd.to_datetime(datestring, format="%Y-%m-%d")
+
+startdate=parse_date(dates[0])
+enddate=parse_date(dates[-1])
+
+
+index=pd.date_range(startdate, enddate, freq='D')
+agedistributiondf=pd.DataFrame(index=index, columns=['CumFirstDose', 'CumSecondDose', 'CumBoosterDose'])
+
+for entry in datalist:  # each entry is a dictionary with CumFirstDose, CumSecondDose, CumBoosterDose
+    date = parse_date(entry['date'])
+    for column in ['CumFirstDose', 'CumSecondDose', 'CumBoosterDose']:
+        # check that nothing is there yet - just in case some dates are duplicated,
+        # maybe with data for different columns in each entry
+        if pd.isna(agedistributiondf.loc[date, column]):
+            # replace None with 0 in our data
+            value = float(entry[column]) if entry[column] != None else 0.0
+            # this is the way you access a specific location in the dataframe - use .loc
+            # and put index,column in a single set of [ ]
+            agedistributiondf.loc[date, column] = value
+            # fill in any remaining "holes" due to missing dates
+agedistributiondf.fillna(0.0, inplace=True)
+
+agedistributiondf
+
+agedistributiondf.plot(colormap="viridis") # easy peasy...
+
+agedistributiondf.plot(logy=True) # ...lemon squeezy
+
+with open("agedistribution.json", "rt") as INFILE:
+    data=json.load(INFILE)
+
+datadic=data['data'][0] # data['data'] is a list
+%matplotlib inline
+# make figures larger
+plt.rcParams['figure.dpi'] = 100
+ # our API access function. This will be called by the button when it is clicked
+def access_api(button):
+    # Ignore the button parameter
+    #
+    # put code for polling the API here
+    #
+    # after all is done, you can switch the icon on the button to a "check" sign
+    # and optionally disable the button - it won't be needed again.
+    apibutton.icon="check"
+    apibutton.disabled=True
+    # see the doc for the parameters
+apibutton=wdg.Button(
+    description='Refresh data',
+    disabled=False,
+    button_style='success', # 'success', 'info', 'warning', 'danger' or ''
+    tooltip='Click to download current Public Health England data',
+    icon='check' # (FontAwesome names without the `fa-` prefix)
+)
+# pandas makes saving to a pickle file dead easy:
+agedistributiondf.to_pickle("agedistributiondf.pkl")
+agedistributiondf.to_pickle("agedistributiondf.pkl")
+# register the callback function with the button
+apibutton.on_click(access_api)
+
+# this is an iPython function that generalises print for Jupyter Notebooks; we use it to
+# display the widgets
+display(apibutton)
+
+# in the dashboard, this should be computed from the json files
+agedistributiondf=pd.read_pickle("agedistributiondf.pkl")
+
+series=wdg.SelectMultiple(
+    options=['CumFirstDose', 'CumSecondDose', 'CumBoosterDose'],
+    value=['CumFirstDose', 'CumSecondDose', 'CumBoosterDose'],
+    rows=3,
+    description='Stats:',
+    disabled=False
+)
+
+scale=wdg.RadioButtons(
+    options=['linear', 'log'],
+#    value='pineapple', # Defaults to 'pineapple'
+#    layout={'width': 'max-content'}, # If the items' names are long
+    description='Refresh data',
+    disabled=False
+)
+# try replacing HBox with a VBox
+controls=wdg.HBox([series, scale])
+
+def timeseries_graph(gcols, gscale):
+    if gscale=='linear':
+        logscale=False
+    else:
+        logscale=True
+    ncols=len(gcols)
+    if ncols>0:
+        agedistributiondf[list(gcols)].plot(logy=logscale)
+        plt.show() # important - graphs won't update if this is missing
+    else:
+        print("Click to select data for graph")
+        print("(CTRL-Click to select more than one category)")
+
+# keep calling timeseries_graph(gcols=value_of_series, gscale=value_of_scale);
+# capture output in widget graph
+graph=wdg.interactive_output(timeseries_graph, {'gcols': series, 'gscale': scale})
+
+display(controls, graph)
+# stack series and scale on top of each other
+ctrls=wdg.VBox([series, scale])
+# put the graph and the controls side by side
+form=wdg.HBox([graph, ctrls])
+
+# Now form contains the entire interface
+display(form)
+
+from IPython.display import clear_output
+import ipywidgets as wdg
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import json
+from uk_covid19 import Cov19API
+%matplotlib inline
+# make figures larger
+plt.rcParams['figure.dpi'] = 100
+
+# Load JSON files and store the raw data in some variable. Edit as appropriate
+jsondata={}
+ef wrangle_data(rawdata):
+    """ Parameters: rawdata - data from json file or API call. Returns a dataframe.
+    Edit to include the code that wrangles the data, creates the dataframe and fills it in. """
+    df=pd.DataFrame(index=range(0,100), columns=['CumFirstDose', 'CumSecondDose', 'CumBoosterDose'])
+    # we have no real data to wrangle, so we just generate two random walks.
+    for entry in datalist:  # each entry is a dictionary with CumFirstDose, CumSecondDose, CumBoosterDose
+        date = parse_date(entry['date'])
+        for column in ['CumFirstDose', 'CumSecondDose', 'CumBoosterDose']:
+            # check that nothing is there yet - just in case some dates are duplicated,
+            # maybe with data for different columns in each entry
+            if pd.isna(agedistributiondf.loc[date, column]):
+                # replace None with 0 in our data
+                value = float(entry[column]) if entry[column] != None else 0.0
+                # this is the way you access a specific location in the dataframe - use .loc
+                # and put index,column in a single set of [ ]
+                agedistributiondf.loc[date, column] = value
+                agedistributiondf.fillna(0.0, inplace=True)
+    df=agedistributiondf
+    return df
+# putting the wrangling code into a function allows you to call it again after refreshing the data through
+# the API. You should call the function directly on the JSON data when the dashboard starts, by including
+# the call in the cell as below:
+df=wrangle_data(jsondata) # df is the dataframe for plotting
+
+# Place your API access code in this function. Do not call this function directly; it will be called by
+# the button callback.
+def access_api():
+    """ Accesses the PHE API. Returns raw data in the same format as data loaded from the "canned" JSON file. """
+    return {} # return data read from the API
+# Printout from this function will be lost in Voila unless captured in an
+# output widget - therefore, we give feedback to the user by changing the
+# appearance of the button
+def api_button_callback(button):
+    """ Button callback - it must take the button as its parameter (unused in this case).
+    Accesses API, wrangles data, updates global variable df used for plotting. """
+    # Get fresh data from the API. If you have time, include some error handling
+    # around this call.
+    apidata = access_api()
+    # wrangle the data and overwrite the dataframe for plotting
+    global df
+    df = wrangle_data(apidata)
+    # the graph won't refresh until the user interacts with the widget.
+    # this function simulates the interaction, see Graph and Analysis below.
+    # you can omit this step in the first instance
+    refresh_graph()
+    # after all is done, you can switch the icon on the button to a "check" sign
+    # and optionally disable the button - it won't be needed again. You can use icons
+    # "unlink" or "times" and change the button text to "Unavailable" in case the
+    # api call fails.
+    apibutton.icon = "check"
+    # apibutton.disabled=True
+apibutton = wdg.Button(
+    description='Successful',  # you may want to change this...
+    disabled=False,
+    button_style='info',  # 'success', 'info', 'warning', 'danger' or ''
+    tooltip="Keep calm and carry on",
+    # FontAwesome names without the `fa-` prefix - try "download"
+    icon='exclamation-triangle'
+)
+# remember to register your button callback function with the button
+apibutton.on_click(api_button_callback)  # the name of your function inside these brackets
+
+display(apibutton)
+
+# run all cells before clicking on this button
+
+def plot_random_walk(walk):
+    df[walk].plot()
+    plt.show()  # important! update won't work properly without this
+
+
+whichwalk = wdg.Dropdown(
+    options=['CumFirstDose', 'CumSecondDose', 'CumBoosterDose' ],
+    value='CumFirstDose',
+    description='CumDose: ',
+    disabled=False,
+)
+def refresh_graph():
+    """ We change the value of the widget in order to force a redraw of the graph;
+    this is useful when the data have been updated. This is a bit of a gimmick; it
+    needs to be customised for one of your widgets. """
+    current = whichwalk.value
+    if current == whichwalk.options[0]:
+        other = whichwalk.options[1]
+    else:
+        other = whichwalk.options[0]
+    whichwalk.value = other  # forces the redraw
+    whichwalk.value = current  # now we can change it back
+
+graph = wdg.interactive_output(plot_random_walk, {'walk': whichwalk})
+
+display(whichwalk, graph)
+
+
+
+
+
